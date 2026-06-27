@@ -27,7 +27,8 @@ jobs:
     - name: Setup Google Repo Command
       run: |
         mkdir -p ~/bin
-        curl https://googleapis.com > ~/bin/repo
+        # Updated directly to the absolute Google Git Source URL to bypass HTML redirection issues
+        curl https://googlesource.com > ~/bin/repo
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
 
