@@ -3,11 +3,12 @@ name: Cloud HelixOS Production Build
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout Repository
@@ -18,7 +19,7 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           df -h
 
-      - name: Install Android Build Dependencies
+      - name: Install Build Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -35,117 +36,57 @@ jobs:
 
       - name: Git Identity
         run: |
-          git config --global user.name "ahmed65-boton"
-          git config --global user.email "chaudry2k16@gmail.com"
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
 
       - name: Init Android 11 Source
         run: |
           mkdir -p workspace
           cd workspace
-          repo init -u https://android.googlesource.com/platform/manifest -b android-11.0.0_r48 --depth=1
+          repo init -u https://android.googlesource.com/platform/manifest -b android-11.0.0_r48
 
       - name: Sync Android Source
         run: |
           cd workspace
-          repo sync -c -j2 --no-tags --no-clone-bundle
+          repo sync -c --no-tags --no-clone-bundle -j2
+
+      - name: Show Available Build Products
+        run: |
+          cd workspace
+          source build/envsetup.sh
+          find device -name AndroidProducts.mk
+          lunch || true
 
       - name: Inject HelixOS Branding
         run: |
           cd workspace
-          sed -i 's/BUILD_DISPLAY_ID := .*/BUILD_DISPLAY_ID := HelixOS-1.0.0-Android-11.1/' build/core/build_id.mk
-          find build/make/target/product/ -name "*.mk" -exec sed -i 's/aosp_x86_64/helixos_x86_64/g' {} + || true
-
-      - name: Download Preinstalled APKs
-        run: |
-          mkdir -p apks
-
-          curl -L --fail -o apks/Firefox.apk \
-            "https://drive.usercontent.google.com/download?id=1WygELl9Qzcgf5r_SE2BwQduUpv7NiCS8&export=download&authuser=2&confirm=t&uuid=8c20bd64-edd1-4f8a-af20-138dc62c1e85&at=ABswASaus02Dzth7GjdIv4KMbilD:1782582890017"
-
-          curl -L --fail -o apks/YouTube.apk \
-            "https://drive.usercontent.google.com/download?id=1Tw5ECN8VL41xQ5YL5hKb8geXICKAleLd&export=download&authuser=2&confirm=t&uuid=31621a02-b553-434e-8d32-626323daa9fb&at=ABswASZCI4t2AJUN92aXN6XBKTYy:1782582940311"
-
-          curl -L --fail -o apks/OpenCamera.apk \
-            "https://data.winudf.com/APK/bmV0LnNvdXJjZWZvcmdlLm9wZW5jYW1lcmFfOTZfOGY2ZTcxYmY?_p=bmV0LnNvdXJjZWZvcmdlLm9wZW5jYW1lcmE%3D&download_id=1500306924307183&filename=Open+Camera_1.56.2_APKPure.apk&full_size=4978282&is_hot=false&k=7d2b249499d47490ce6314eab473a5c06a42b23c&package_name=net.sourceforge.opencamera&source=web&token=1782583100-af8ac18cdd-0-d9f1314f7bb25e36b3548fd9ef5b2e83"
-
-          ls -lh apks
-
-      - name: Inject APKs Into System Image
-        run: |
-          cd workspace
-
-          mkdir -p packages/apps/HelixPrebuilt/Firefox
-          mkdir -p packages/apps/HelixPrebuilt/YouTube
-          mkdir -p packages/apps/HelixPrebuilt/OpenCamera
-
-          cp ../apks/Firefox.apk packages/apps/HelixPrebuilt/Firefox/Firefox.apk
-          cp ../apks/YouTube.apk packages/apps/HelixPrebuilt/YouTube/YouTube.apk
-          cp ../apks/OpenCamera.apk packages/apps/HelixPrebuilt/OpenCamera/OpenCamera.apk
-
-          cat > packages/apps/HelixPrebuilt/Android.mk <<'EOF'
-          LOCAL_PATH := $(call my-dir)
-
-          include $(CLEAR_VARS)
-          LOCAL_MODULE := Firefox
-          LOCAL_SRC_FILES := Firefox/Firefox.apk
-          LOCAL_MODULE_CLASS := APPS
-          LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
-          LOCAL_CERTIFICATE := PRESIGNED
-          LOCAL_PRODUCT_MODULE := true
-          include $(BUILD_PREBUILT)
-
-          include $(CLEAR_VARS)
-          LOCAL_MODULE := YouTube
-          LOCAL_SRC_FILES := YouTube/YouTube.apk
-          LOCAL_MODULE_CLASS := APPS
-          LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
-          LOCAL_CERTIFICATE := PRESIGNED
-          LOCAL_PRODUCT_MODULE := true
-          include $(BUILD_PREBUILT)
-
-          include $(CLEAR_VARS)
-          LOCAL_MODULE := OpenCamera
-          LOCAL_SRC_FILES := OpenCamera/OpenCamera.apk
-          LOCAL_MODULE_CLASS := APPS
-          LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
-          LOCAL_CERTIFICATE := PRESIGNED
-          LOCAL_PRODUCT_MODULE := true
-          include $(BUILD_PREBUILT)
-          EOF
-
-          echo 'PRODUCT_PACKAGES += Firefox YouTube OpenCamera' >> device/generic/goldfish/x86_64-vendor.mk
+          mkdir -p vendor/helixos
+          echo "HelixOS Android 11 x86_64" > vendor/helixos/HELIXOS.txt
 
       - name: Build HelixOS system.img
         run: |
           cd workspace
           source build/envsetup.sh
-          lunch aosp_x86_64-userdebug
-          make systemimage -j2
+          lunch sdk_phone_x86_64-userdebug
+          m systemimage -j2
 
       - name: Prepare Output
+        if: always()
         run: |
-          mkdir -p release
-          cp workspace/out/target/product/generic_x86_64/system.img release/HelixOS-1.0.0-Android11.1-x86_64-system.img
-          cp .github/workflows/build.yaml release/build.yaml
-          ls -lh release
+          mkdir -p output
+          find workspace/out -name "system.img" -exec cp {} output/HelixOS-system.img \; || true
+          ls -lh output || true
 
       - name: Upload GitHub Actions Artifact
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: HelixOS-1.0.0-system-img
-          path: release/*
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: HelixOS-1.0.0
-          name: HelixOS 1.0.0 Android 11.1
-          files: release/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: HelixOS-system-img
+          path: output/
 
       - name: Push Build Files To Repo
+        if: success()
         run: |
-          git add .github/workflows/build.yaml
-          git commit -m "Add HelixOS cloud build workflow" || echo "Nothing to commit"
-          git push origin HEAD:main
+          git add output || true
+          git commit -m "Add HelixOS build output" || echo "Nothing to commit"
+          git push origin main
