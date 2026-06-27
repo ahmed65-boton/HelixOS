@@ -1,0 +1,48 @@
+name: Cloud Android Build
+
+on:
+  workflow_dispatch: # Allows you to start the build manually with a click
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Free Up Disk Space on Cloud Server
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+    - name: Install Android Build Dependency Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev
+
+    - name: Install Google Repo Tool
+      run: |
+        mkdir -p ~/bin
+        curl https://googleapis.com > ~/bin/repo
+        chmod a+x ~/bin/repo
+        sudo ln -sf ~/bin/repo /usr/bin/repo
+
+    - name: Configure Git Developer Info
+      run: |
+        git config --global user.name "CloudBuilder"
+        git config --global user.email "builder@cloud.local"
+
+    - name: Sync Android Core Code (Shallow Clone)
+      run: |
+        mkdir android_workspace
+        cd android_workspace
+        # Initializing Android 11 platform source code
+        repo init -u https://googlesource.com -b android-11.0.0_r48 --depth=1
+        # Downloading code efficiently
+        repo sync -c -j$(nproc) --no-tags --no-clone-bundle
