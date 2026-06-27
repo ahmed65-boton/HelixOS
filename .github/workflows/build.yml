@@ -1,4 +1,3 @@
-```yaml
 name: Cloud HelixOS Production Build
 
 on:
@@ -150,4 +149,3 @@ jobs:
           git add .github/workflows/build.yaml
           git commit -m "Add HelixOS cloud build workflow" || echo "Nothing to commit"
           git push origin HEAD:main
-```
